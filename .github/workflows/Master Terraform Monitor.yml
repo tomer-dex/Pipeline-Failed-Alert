@@ -1,0 +1,75 @@
+name: Master Terraform Monitor
+
+on:
+  schedule:
+    - cron: '0 5 * * *'  # כל יום בשעה 05:00 UTC
+  workflow_dispatch:      # ניתן להריץ ידנית
+
+jobs:
+  run-and-monitor:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install curl jq -y
+
+      - name: Trigger blank workflow
+        id: trigger
+        run: |
+          echo "📤 שולח dispatch להפעלת blank.yml..."
+
+          curl -s -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/${{ github.repository }}/actions/workflows/blank.yml/dispatches \
+            -d '{"ref":"main"}'
+
+          echo "⏳ ממתין ליצירת run..."
+          sleep 10
+
+          echo "🔍 מאתר את ה-run_id האחרון..."
+          run_id=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/${{ github.repository }}/actions/workflows/blank.yml/runs?branch=main \
+            | jq '.workflow_runs[0].id')
+
+          echo "✅ run_id שנמצא: $run_id"
+          echo "run_id=$run_id" >> $GITHUB_OUTPUT
+
+      - name: Poll run status
+        id: poll
+        run: |
+          run_id=${{ steps.trigger.outputs.run_id }}
+          echo "🔁 עוקב אחרי סטטוס של run_id=$run_id"
+
+          for i in {1..10}; do
+            echo "⌛ בדיקה #$i..."
+
+            result=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              https://api.github.com/repos/${{ github.repository }}/actions/runs/$run_id)
+
+            status=$(echo "$result" | jq -r '.status')
+            conclusion=$(echo "$result" | jq -r '.conclusion')
+
+            echo "📘 Status: $status | Conclusion: $conclusion"
+
+            if [ "$status" == "completed" ]; then
+              echo "status=$status" >> $GITHUB_OUTPUT
+              echo "conclusion=$conclusion" >> $GITHUB_OUTPUT
+              break
+            fi
+
+            sleep 15
+          done
+
+      - name: Print failure message if run failed
+        if: ${{ steps.poll.outputs.conclusion != 'success' }}
+        run: |
+          echo "❌ הפייפליין 'blank.yml' נכשל!"
+          echo "Conclusion: ${{ steps.poll.outputs.conclusion }}"
+          exit 1  # נסמן את ה־master pipeline ככישלון גם כן
+
+      - name: Print success message
+        if: ${{ steps.poll.outputs.conclusion == 'success' }}
+        run: echo "✅ הפייפליין blank.yml הצליח"
