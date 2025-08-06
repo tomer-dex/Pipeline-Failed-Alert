@@ -18,7 +18,9 @@ jobs:
       - name: Trigger blank workflow
         id: trigger
         run: |
-          echo "📤 שולח dispatch להפעלת blank.yml..."
+          echo "📤 מפעיל blank.yml ושומר זמן התחלה..."
+          start_time=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          echo "start_time=$start_time" >> $GITHUB_OUTPUT
 
           curl -s -X POST \
             -H "Accept: application/vnd.github+json" \
@@ -26,21 +28,42 @@ jobs:
             https://api.github.com/repos/${{ github.repository }}/actions/workflows/blank.yml/dispatches \
             -d '{"ref":"main"}'
 
-          echo "⏳ ממתין ליצירת run..."
+          echo "⏳ ממתין 10 שניות שהריצה תתחיל..."
           sleep 10
 
-          echo "🔍 מאתר את ה-run_id האחרון..."
-          run_id=$(curl -s -H "Authorization: token ${{ secrets.GH_PAT_TOKEN }}" \
-            https://api.github.com/repos/${{ github.repository }}/actions/workflows/blank.yml/runs?branch=main \
-            | jq '.workflow_runs[0].id')
+      - name: Find latest run after dispatch
+        id: find-run
+        run: |
+          echo "🔍 מחפש run שנוצר אחרי: ${{ steps.trigger.outputs.start_time }}"
+          run_id=""
 
-          echo "✅ run_id שנמצא: $run_id"
-          echo "run_id=$run_id" >> $GITHUB_OUTPUT
+          for i in {1..10}; do
+            echo "⌛ ניסיון $i..."
+            runs=$(curl -s -H "Authorization: token ${{ secrets.GH_PAT_TOKEN }}" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/blank.yml/runs?branch=main")
+
+            run_id=$(echo "$runs" | jq -r --arg start "${{ steps.trigger.outputs.start_time }}" '
+              .workflow_runs[] | select(.created_at > $start) | .id' | head -n 1)
+
+            if [ -n "$run_id" ]; then
+              echo "✅ נמצא run_id: $run_id"
+              echo "run_id=$run_id" >> $GITHUB_OUTPUT
+              break
+            fi
+
+            echo "⏳ לא נמצא עדיין... מחכה 5 שניות"
+            sleep 5
+          done
+
+          if [ -z "$run_id" ]; then
+            echo "❌ לא הצלחתי למצוא run שנוצר אחרי ההפעלה"
+            exit 1
+          fi
 
       - name: Poll run status
         id: poll
         run: |
-          run_id=${{ steps.trigger.outputs.run_id }}
+          run_id=${{ steps.find-run.outputs.run_id }}
           echo "🔁 עוקב אחרי סטטוס של run_id=$run_id"
 
           for i in {1..10}; do
@@ -68,7 +91,7 @@ jobs:
         run: |
           echo "❌ הפייפליין 'blank.yml' נכשל!"
           echo "Conclusion: ${{ steps.poll.outputs.conclusion }}"
-          exit 1  # מסמן את ה־master pipeline ככישלון
+          exit 1
 
       - name: Print success message
         if: ${{ steps.poll.outputs.conclusion == 'success' }}
