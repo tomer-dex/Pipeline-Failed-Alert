@@ -17,7 +17,7 @@ jobs:
 
       - name: Token Test
         run: |
-          curl -s -H "Authorization: token <YOUR_TOKEN>" \
+          curl -s -H "Authorization: token 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" \
           https://api.github.com/user
 
       - name: Trigger TerraformPlan-FAILSimulation.yml
