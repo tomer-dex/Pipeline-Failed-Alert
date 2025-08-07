@@ -17,7 +17,7 @@ jobs:
 
       - name: Token Test
         run: |
-          curl -H "Authorization: Bearer "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"" \
+          curl -H "Authorization: Bearer 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" \
           -H "Accept: application/vnd.github+json" \
            https://api.github.com/user
 
