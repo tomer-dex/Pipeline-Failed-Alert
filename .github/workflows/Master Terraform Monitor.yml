@@ -15,8 +15,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install curl jq -y
 
-       -name: Token Test
-         run: |
+      - name: Token Test
+        run: |
           curl -s -H "Authorization: token <YOUR_TOKEN>" \
           https://api.github.com/user
 
