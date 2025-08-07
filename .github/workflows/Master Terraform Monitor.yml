@@ -25,7 +25,7 @@ jobs:
           curl -s -X POST \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: token ${{ secrets.GH_PAT_TOKEN }}" \
-            https://api.github.com/repos/${{ github.repository }}/actions/workflows/erraform Plan - FAIL Simulation.yml/dispatches \
+            https://api.github.com/repos/tomer-dex/Pipeline-Failed-Alert/actions/workflows/Terraform%20Plan%20-%20FAIL%20Simulation.yml/dispatches \
             -d '{"ref":"main"}'
 
           echo "⏳ ממתין 10 שניות שהריצה תתחיל..."
