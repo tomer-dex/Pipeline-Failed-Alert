@@ -17,7 +17,9 @@ jobs:
 
       - name: Token Test
         run: |
-          curl -H "Authorization: Bearer ghs_3RWaL0MUdF3Wax2NxmWfYZMWM6Gwjy1iGgRN" https://api.github.com/user
+          curl -X GET https://api.github.com/user \
+          -H "Authorization: Bearer ghs_3RWaL0MUdF3Wax2NxmWfYZMWM6Gwjy1iGgRN" \
+          -H "Accept: application/vnd.github+json"
 
       - name: Trigger TerraformPlan-FAILSimulation.yml
         id: trigger
