@@ -120,6 +120,7 @@ jobs:
         run: |
           echo "📨 Opening ticket in Freshservice..."
 
+          # הפוך את הפלט ל-JSON string עם escape תקני
           DRIFT_BODY=$(cat drift_details.txt | jq -Rs .)
 
           curl -s -X POST "https://directex.freshservice.com/api/v2/tickets" \
