@@ -3,6 +3,9 @@ name: Trigger Child Workflow
 on:
   workflow_dispatch:
 
+permissions:
+  actions: write  # חובה כדי שה- GITHUB_TOKEN יורשה להריץ workflows אחרים
+
 jobs:
   trigger:
     runs-on: ubuntu-latest
