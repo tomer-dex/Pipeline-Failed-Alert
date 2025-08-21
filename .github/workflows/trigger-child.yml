@@ -7,13 +7,58 @@ permissions:
   actions: write  # חובה כדי שה- GITHUB_TOKEN יורשה להריץ workflows אחרים
 
 jobs:
-  trigger:
+  trigger-and-monitor:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger child.yml
+      - name: Get start time
+        id: time
+        run: |
+          echo "start_time=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_OUTPUT
+
+      - name: Trigger child workflow
         run: |
           curl -X POST \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             https://api.github.com/repos/${{ github.repository }}/actions/workflows/child.yml/dispatches \
             -d '{"ref":"main"}'
+
+      - name: Wait for child to start
+        run: sleep 10
+
+      - name: Find latest child run
+        id: find
+        run: |
+          RUN_ID=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/${{ github.repository }}/actions/workflows/child.yml/runs?branch=main \
+            | jq -r --arg start "${{ steps.time.outputs.start_time }}" '
+              .workflow_runs[] | select(.created_at > $start) | .id' | head -n 1)
+
+          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+
+      - name: Poll child workflow status
+        id: poll
+        run: |
+          run_id=${{ steps.find.outputs.run_id }}
+
+          for i in {1..10}; do
+            result=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              https://api.github.com/repos/${{ github.repository }}/actions/runs/$run_id)
+
+            status=$(echo "$result" | jq -r '.status')
+            conclusion=$(echo "$result" | jq -r '.conclusion')
+
+            echo "Status: $status | Conclusion: $conclusion"
+
+            if [[ "$status" == "completed" ]]; then
+              echo "conclusion=$conclusion" >> $GITHUB_OUTPUT
+              break
+            fi
+            sleep 10
+          done
+
+      - name: Report failure if needed
+        if: ${{ steps.poll.outputs.conclusion != 'success' }}
+        run: |
+          echo "❌ Child workflow נכשל – פותח טיקט (לדוגמה)"
+          # כאן תוכל לשים קריאה ל-Freshdesk או מערכת אחרת
