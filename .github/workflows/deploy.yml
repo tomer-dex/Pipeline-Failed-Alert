@@ -1,10 +1,10 @@
-name: Terraform Plan and Apply
+name: Terraform Plan Only
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # מאפשר להריץ את הפייפליין ידנית
 
 jobs:
-  terraform:
+  terraform-plan:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -27,7 +27,4 @@ jobs:
         run: terraform -chdir=$TF_DIR init
 
       - name: Terraform Plan
-        run: terraform -chdir=$TF_DIR plan -out=tfplan.out
-
-      - name: Terraform Apply
-        run: terraform -chdir=$TF_DIR apply -auto-approve tfplan.out
+        run: terraform -chdir=$TF_DIR plan
