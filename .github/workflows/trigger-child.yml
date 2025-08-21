@@ -1,4 +1,4 @@
-name: Trigger Deploy Workflow
+name: Trigger Terraform Deploy and Show Diff
 
 on:
   workflow_dispatch:
@@ -8,72 +8,73 @@ permissions:
   contents: read
 
 jobs:
-  trigger-and-monitor:
+  trigger-and-read-plan:
     runs-on: ubuntu-latest
 
     steps:
       - name: Get start time
         id: time
-        run: |
-          echo "start_time=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_OUTPUT
+        run: echo "start_time=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
 
       - name: Trigger deploy.yml
         run: |
-          echo "🚀 מפעיל את deploy.yml"
+          echo "🚀 Triggering 'deploy.yml'..."
           curl -X POST \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             https://api.github.com/repos/${{ github.repository }}/actions/workflows/deploy.yml/dispatches \
             -d '{"ref":"main"}'
-
-      - name: Wait for child workflow to start
+      
+      - name: Wait a bit...
         run: sleep 10
 
-      - name: Find latest child run
+      - name: Find the new workflow run
         id: find
         run: |
-          RUN_ID=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/deploy.yml/runs?branch=main" \
+          echo "🔍 Looking for new run after: ${{ steps.time.outputs.start_time }}"
+          run_id=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/${{ github.repository }}/actions/workflows/deploy.yml/runs?branch=main \
             | jq -r --arg start "${{ steps.time.outputs.start_time }}" '
-                .workflow_runs[] | select(.created_at > $start) | .id' | head -n 1)
+              .workflow_runs[] | select(.created_at > $start) | .id' | head -n 1)
 
-          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+          echo "run_id=$run_id" >> $GITHUB_OUTPUT
 
-      - name: Poll child workflow status
+      - name: Wait for deploy to finish
         id: poll
         run: |
           run_id=${{ steps.find.outputs.run_id }}
-
-          for i in {1..10}; do
+          echo "🔁 Polling run ID $run_id..."
+          for i in {1..15}; do
             result=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
               https://api.github.com/repos/${{ github.repository }}/actions/runs/$run_id)
-
             status=$(echo "$result" | jq -r '.status')
             conclusion=$(echo "$result" | jq -r '.conclusion')
-
-            echo "Status: $status | Conclusion: $conclusion"
-
-            if [[ "$status" == "completed" ]]; then
+            echo "⏳ Status: $status | Conclusion: $conclusion"
+            if [ "$status" == "completed" ]; then
               echo "conclusion=$conclusion" >> $GITHUB_OUTPUT
               break
             fi
             sleep 10
           done
 
-      - name: Print Terraform diff if exists
-        if: ${{ steps.poll.outputs.conclusion == 'success' }}
+      - name: Download logs
+        if: ${{ steps.poll.outputs.conclusion != '' }}
         run: |
-          echo "🔍 מנסה להוציא את השינויים מה-plan"
           run_id=${{ steps.find.outputs.run_id }}
-
-          logs_url="https://api.github.com/repos/${{ github.repository }}/actions/runs/$run_id/logs"
-          echo "📥 מוריד לוגים מה-child workflow"
-          curl -sL -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "$logs_url" --output logs.zip
-
-          unzip -o logs.zip -d logs
-          echo "📂 תצוגת תוכן התיקיה:"
+          echo "📥 Downloading logs for run ID $run_id..."
+          curl -s -L -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -o logs.zip \
+            https://api.github.com/repos/${{ github.repository }}/actions/runs/$run_id/logs
+          unzip logs.zip -d logs
+          echo "📂 Folder structure:"
           find logs
 
-          echo "📄 חיפוש קובץ שמכיל את הפלט של terraform plan..."
-          grep -irl 'Terraform will perform the following actions' logs || echo "🔎 לא נמצאו שינויים"
-
+      - name: Show Terraform Plan Diff
+        run: |
+          echo "🔍 Trying to find terraform plan output..."
+          # שינוי מפתח - כאן בוחרים את הקובץ שבו יש את הפלט המלא
+          PLAN_FILE=$(find logs -type f -iname "*Terraform Plan.txt" | head -n 1)
+          echo "📄 Found plan file: $PLAN_FILE"
+          echo "----- 🟡 Terraform Plan Output Start 🟡 -----"
+          cat "$PLAN_FILE"
+          echo "----- 🔚 Terraform Plan Output End 🔚 -----"
