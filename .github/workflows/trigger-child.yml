@@ -1,6 +1,8 @@
-name: Trigger Terraform Deploy and Show Diff
+name: Master Terraform Monitor
 
 on:
+  schedule:
+    - cron: '0 5 * * *'  # כל יום ב־05:00 UTC
   workflow_dispatch:
 
 permissions:
@@ -8,47 +10,62 @@ permissions:
   contents: read
 
 jobs:
-  trigger-and-read-plan:
+  run-and-monitor:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Get start time
-        id: time
-        run: echo "start_time=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
-
-      - name: Trigger deploy.yml
+      - name: Install tools
         run: |
-          echo "🚀 מפעיל את deploy.yml"
-          curl -X POST \
+          sudo apt-get update
+          sudo apt-get install curl jq unzip -y
+
+      - name: 📤 Trigger TerraformPlan-DRIFTChecker.yml
+        id: trigger
+        run: |
+          echo "📤 Triggering child workflow and saving start time..."
+          start_time=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          echo "start_time=$start_time" >> $GITHUB_ENV
+
+          curl -s -X POST \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            https://api.github.com/repos/${{ github.repository }}/actions/workflows/deploy.yml/dispatches \
+            https://api.github.com/repos/${{ github.repository }}/actions/workflows/TerraformPlan-DRIFTChecker.yml/dispatches \
             -d '{"ref":"main"}'
 
-      - name: Wait a bit...
-        run: sleep 10
+          echo "⏳ Waiting for run to begin..."
+          sleep 10
 
-      - name: Find the new workflow run
-        id: find
+      - name: 🔍 Find latest run
+        id: find-run
         run: |
-          echo "🔍 מחפש run חדש..."
-          run_id=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            https://api.github.com/repos/${{ github.repository }}/actions/workflows/deploy.yml/runs?branch=main \
-            | jq -r --arg start "${{ steps.time.outputs.start_time }}" '
-              .workflow_runs[] | select(.created_at > $start) | .id' | head -n 1)
-          echo "run_id=$run_id" >> $GITHUB_OUTPUT
+          echo "🔍 Looking for workflow run after $start_time..."
+          for i in {1..5}; do
+            runs=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/TerraformPlan-DRIFTChecker.yml/runs?branch=main")
+            run_id=$(echo "$runs" | jq -r --arg start "$start_time" '.workflow_runs[] | select(.created_at > $start) | .id' | head -n 1)
+            if [ -n "$run_id" ]; then
+              echo "run_id=$run_id" >> $GITHUB_OUTPUT
+              break
+            fi
+            echo "⌛ Not found yet... waiting"
+            sleep 5
+          done
 
-      - name: Poll for completion
+          if [ -z "$run_id" ]; then
+            echo "❌ Failed to locate workflow run"
+            exit 1
+          fi
+
+      - name: ⏱ Poll workflow run status
         id: poll
         run: |
-          run_id=${{ steps.find.outputs.run_id }}
-          echo "🔁 ממתין לסיום של run_id=$run_id"
-          for i in {1..15}; do
+          run_id=${{ steps.find-run.outputs.run_id }}
+          for i in {1..10}; do
             result=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
               https://api.github.com/repos/${{ github.repository }}/actions/runs/$run_id)
             status=$(echo "$result" | jq -r '.status')
             conclusion=$(echo "$result" | jq -r '.conclusion')
-            echo "🔎 Status: $status | Conclusion: $conclusion"
+            echo "Status: $status | Conclusion: $conclusion"
             if [ "$status" == "completed" ]; then
               echo "conclusion=$conclusion" >> $GITHUB_OUTPUT
               break
@@ -56,44 +73,54 @@ jobs:
             sleep 10
           done
 
-      - name: Download logs
+      - name: 📥 Download workflow logs
         if: ${{ steps.poll.outputs.conclusion != '' }}
         run: |
-          run_id=${{ steps.find.outputs.run_id }}
-          echo "📥 מוריד לוגים עבור run_id=$run_id"
+          run_id=${{ steps.find-run.outputs.run_id }}
           curl -s -L -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             -o logs.zip \
             https://api.github.com/repos/${{ github.repository }}/actions/runs/$run_id/logs
           unzip -o logs.zip -d logs
           find logs
 
-      - name: Show Terraform Plan Diff
-        id: diff
+      - name: 🔍 Check for drift in Terraform plan
+        id: diff-check
         run: |
-          echo "📄 בודק את הפלט של terraform plan"
           PLAN_FILE=$(find logs -type f -iname "*Terraform Plan.txt" | head -n 1)
-
+          echo "Plan file: $PLAN_FILE"
+          
           if [ -z "$PLAN_FILE" ]; then
-            echo "✅ לא נמצא קובץ plan – כנראה שהכל תקין או שה-child לא הנפיק תוכן"
+            echo "❌ Plan output file not found"
             echo "drift_detected=false" >> $GITHUB_OUTPUT
             exit 0
           fi
 
-          echo "📄 הקובץ שנמצא: $PLAN_FILE"
-          echo "----- Terraform Plan Output Start -----"
+          echo "📄 Terraform plan output:"
           cat "$PLAN_FILE"
-          echo "----- Terraform Plan Output End -----"
 
-          if grep -qE '(\+ create|\~ update|\- destroy)' "$PLAN_FILE"; then
-            echo "⚠️ נמצאו שינויים – ייתכן DRIFT"
-            echo "drift_detected=true" >> $GITHUB_OUTPUT
-          else
-            echo "✅ אין שינויים – הכל מיושר!"
+          if grep -q 'No changes. Infrastructure is up-to-date.' "$PLAN_FILE"; then
+            echo "✅ No drift detected"
             echo "drift_detected=false" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️ Drift detected!"
+            echo "drift_detected=true" >> $GITHUB_OUTPUT
+            echo "drift_details<<EOF" >> $GITHUB_OUTPUT
+            cat "$PLAN_FILE" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
           fi
 
-      - name: Open ticket (simulated)
-        if: ${{ steps.diff.outputs.drift_detected == 'true' }}
+      - name: 📩 Create Freshservice ticket
+        if: ${{ steps.diff-check.outputs.drift_detected == 'true' }}
         run: |
-          echo "🚨 DRIFT זוהה – פותח קריאה (סימולציה)"
-          # ניתן להוסיף כאן קריאה ל-Freshdesk או כל מערכת תמיכה אחרת
+          echo "📨 Creating ticket in Freshservice..."
+          curl -s -X POST "https://directex.freshservice.com/api/v2/tickets" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Basic ${{ secrets.FRESHDESK_API_KEY }}" \
+            -d "{
+              \"subject\": \"🚨 DRIFT Detected in Terraform\",
+              \"description\": \"The following infrastructure drift was detected:\n\n${{ steps.diff-check.outputs.drift_details }}\",
+              \"email\": \"tomer@direct-ex.co.il\",
+              \"priority\": 1,
+              \"status\": 2
+            }"
+          echo "🎫 Ticket sent."
