@@ -19,7 +19,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install curl jq unzip -y
 
-      - name: 📤 Trigger TerraformPlan-DRIFTChecker.yml
+      - name: 📤 Trigger deploy.yml
         id: trigger
         run: |
           echo "start_time=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_ENV
@@ -38,7 +38,7 @@ jobs:
         run: |
           for i in {1..5}; do
             runs=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/TerraformPlan-DRIFTChecker.yml/runs?branch=main")
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/deploy.yml/runs?branch=main")
 
             run_id=$(echo "$runs" | jq -r --arg start "$start_time" '
               .workflow_runs[] | select(.created_at > $start) | .id' | head -n 1)
