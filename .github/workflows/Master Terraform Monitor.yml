@@ -2,7 +2,7 @@ name: Master Terraform Monitor
 
 on:
   schedule:
-    - cron: '0 5 * * *'  # כל יום בשעה 05:00 UTC
+    - cron: '0 5 * * *'  # כל יום ב־05:00 UTC
   workflow_dispatch:
 
 jobs:
@@ -15,12 +15,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install curl jq -y
 
-      - name: Trigger TerraformPlan-DRIFTChecker.yml
+      - name: 📤 הפעלת TerraformPlan-DRIFTChecker.yml
         id: trigger
         run: |
           echo "📤 מפעיל TerraformPlan-DRIFTChecker.yml ושומר זמן התחלה..."
           start_time=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          echo "start_time=$start_time" >> $GITHUB_OUTPUT
+          echo "start_time=$start_time" >> $GITHUB_ENV
 
           curl -s -X POST \
             -H "Accept: application/vnd.github+json" \
@@ -31,19 +31,16 @@ jobs:
           echo "⏳ ממתין 10 שניות שהריצה תתחיל..."
           sleep 10
 
-      - name: Find latest run after dispatch
+      - name: 🔍 מציאת Run האחרון של ה-Workflow
         id: find-run
         run: |
-          echo "🔍 מחפש run שנוצר אחרי: ${{ steps.trigger.outputs.start_time }}"
-          run_id=""
-
-          for i in {1..10}; do
+          echo "🔍 מחפש run שנוצר אחרי: $start_time"
+          for i in {1..5}; do
             echo "⌛ ניסיון $i..."
             runs=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
               "https://api.github.com/repos/${{ github.repository }}/actions/workflows/TerraformPlan-DRIFTChecker.yml/runs?branch=main")
 
-            run_id=$(echo "$runs" | jq -r --arg start "${{ steps.trigger.outputs.start_time }}" '
-              .workflow_runs[] | select(.created_at > $start) | .id' | head -n 1)
+            run_id=$(echo "$runs" | jq -r --arg start "$start_time" '.workflow_runs[] | select(.created_at > $start) | .id' | head -n 1)
 
             if [ -n "$run_id" ]; then
               echo "✅ נמצא run_id: $run_id"
@@ -60,13 +57,13 @@ jobs:
             exit 1
           fi
 
-      - name: Poll run status
+      - name: ⏱ מעקב אחרי סטטוס הריצה
         id: poll
         run: |
           run_id=${{ steps.find-run.outputs.run_id }}
           echo "🔁 עוקב אחרי סטטוס של run_id=$run_id"
 
-          for i in {1..10}; do
+          for i in {1..5}; do
             echo "⌛ בדיקה #$i..."
 
             result=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
@@ -86,13 +83,13 @@ jobs:
             sleep 15
           done
 
-      - name: Print failure message if run failed
+      - name: ❌ כישלון בתהליך
         if: ${{ steps.poll.outputs.conclusion != 'success' }}
         run: |
           echo "❌ הפייפליין 'TerraformPlan-DRIFTChecker.yml' נכשל!"
-          echo "Conclusion: ${{ steps.poll.outputs.conclusion }}"
           exit 1
 
-      - name: Print success message
+      - name: ✅ הצלחה בתהליך
         if: ${{ steps.poll.outputs.conclusion == 'success' }}
-        run: echo "✅ הפייפליין TerraformPlan-DRIFTChecker.yml הצליח"
+        run: |
+          echo "✅ הפייפליין TerraformPlan-DRIFTChecker.yml הצליח!"
