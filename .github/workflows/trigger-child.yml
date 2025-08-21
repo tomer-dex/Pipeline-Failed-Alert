@@ -92,13 +92,17 @@ jobs:
       - name: 🔍 Check Terraform plan for drift
         id: diff-check
         run: |
-          PLAN_FILE=$(find logs -type f -iname "*Terraform Plan.txt" | head -n 1)
+          PLAN_FILE=$(find logs -type f -iname "*plan*.txt" | head -n 1)
           echo "Found plan file: $PLAN_FILE"
 
           if [ -z "$PLAN_FILE" ]; then
+            echo "✅ No plan file found – assuming no drift"
             echo "drift_detected=false" >> $GITHUB_OUTPUT
             exit 0
           fi
+
+          echo "📄 Plan output:"
+          cat "$PLAN_FILE"
 
           if grep -q 'No changes. Infrastructure is up-to-date.' "$PLAN_FILE"; then
             echo "✅ No drift detected"
@@ -106,27 +110,27 @@ jobs:
           else
             echo "⚠️ Drift detected"
             echo "drift_detected=true" >> $GITHUB_OUTPUT
-
-            # שמירה זמנית של הפלט
-            echo "DRIFT_DETAILS<<EOF" >> $GITHUB_ENV
-            cat "$PLAN_FILE" >> $GITHUB_ENV
-            echo "EOF" >> $GITHUB_ENV
+            echo "📄 Saving drift output..."
+            cat "$PLAN_FILE" > drift_details.txt
           fi
+        shell: bash
 
       - name: 📩 Open ticket in Freshservice
         if: ${{ steps.diff-check.outputs.drift_detected == 'true' }}
-        env:
-          DRIFT_BODY: ${{ env.DRIFT_DETAILS }}
         run: |
           echo "📨 Opening ticket in Freshservice..."
+
+          DRIFT_BODY=$(cat drift_details.txt | jq -Rs .)
 
           curl -s -X POST "https://directex.freshservice.com/api/v2/tickets" \
             -H "Content-Type: application/json" \
             -H "Authorization: Basic ${{ secrets.FRESHDESK_API_KEY }}" \
             -d "{
               \"subject\": \"🚨 Terraform Drift Detected\",
-              \"description\": \"Detected infrastructure drift:\n\n${DRIFT_BODY}\",
+              \"description\": $DRIFT_BODY,
               \"email\": \"tomer@direct-ex.co.il\",
               \"priority\": 1,
               \"status\": 2
             }"
+
+          echo "🎫 Ticket opened successfully"
