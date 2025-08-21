@@ -115,6 +115,8 @@ jobs:
 
       - name: 📩 Open ticket in Freshservice
         if: ${{ steps.diff-check.outputs.drift_detected == 'true' }}
+        env:
+          DRIFT_BODY: ${{ env.DRIFT_DETAILS }}
         run: |
           echo "📨 Opening ticket in Freshservice..."
 
@@ -123,10 +125,8 @@ jobs:
             -H "Authorization: Basic ${{ secrets.FRESHDESK_API_KEY }}" \
             -d "{
               \"subject\": \"🚨 Terraform Drift Detected\",
-              \"description\": \"Detected infrastructure drift during nightly Terraform Plan:\n\n${{ steps.diff-check.outputs.drift_details }}\",
+              \"description\": \"Detected infrastructure drift:\n\n${DRIFT_BODY}\",
               \"email\": \"tomer@direct-ex.co.il\",
               \"priority\": 1,
               \"status\": 2
             }"
-
-          echo "🎫 Ticket opened successfully"
