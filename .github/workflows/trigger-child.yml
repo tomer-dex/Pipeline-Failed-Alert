@@ -107,10 +107,10 @@ jobs:
             echo "⚠️ Drift detected"
             echo "drift_detected=true" >> $GITHUB_OUTPUT
 
-            # Save drift output to temp file for proper EOF formatting
-            echo "drift_details<<EOF" >> $GITHUB_OUTPUT
-            cat "$PLAN_FILE" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
+            # שמירה זמנית של הפלט
+            echo "DRIFT_DETAILS<<EOF" >> $GITHUB_ENV
+            cat "$PLAN_FILE" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
           fi
 
       - name: 📩 Open ticket in Freshservice
