@@ -5,6 +5,7 @@ on:
 
 permissions:
   actions: write  # חובה כדי שה- GITHUB_TOKEN יורשה להריץ workflows אחרים
+  contents: read
 
 jobs:
   trigger-and-monitor:
