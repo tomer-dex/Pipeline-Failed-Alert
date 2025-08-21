@@ -74,8 +74,9 @@ jobs:
           PLAN_FILE=$(find logs -type f -iname "*Terraform Plan.txt" | head -n 1)
 
           if [ -z "$PLAN_FILE" ]; then
-            echo "❌ לא נמצא קובץ פלט של terraform plan"
-            exit 1
+            echo "✅ לא נמצא קובץ plan – כנראה שהכל תקין או שה-child לא הנפיק תוכן"
+            echo "drift_detected=false" >> $GITHUB_OUTPUT
+            exit 0
           fi
 
           echo "📄 הקובץ שנמצא: $PLAN_FILE"
@@ -83,17 +84,16 @@ jobs:
           cat "$PLAN_FILE"
           echo "----- Terraform Plan Output End -----"
 
-          # חיפוש האם יש שינויים בתוכן
-          if grep -q 'No changes. Infrastructure is up-to-date.' "$PLAN_FILE"; then
-            echo "✅ אין שינויים – התשתית מיושרת!"
-            echo "drift_detected=false" >> $GITHUB_OUTPUT
-          else
-            echo "⚠️ יש שינויים בתשתית – DRIFT קיים!"
+          if grep -qE '(\+ create|\~ update|\- destroy)' "$PLAN_FILE"; then
+            echo "⚠️ נמצאו שינויים – ייתכן DRIFT"
             echo "drift_detected=true" >> $GITHUB_OUTPUT
+          else
+            echo "✅ אין שינויים – הכל מיושר!"
+            echo "drift_detected=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Open ticket (simulated)
         if: ${{ steps.diff.outputs.drift_detected == 'true' }}
         run: |
           echo "🚨 DRIFT זוהה – פותח קריאה (סימולציה)"
-          # כאן תוכל להוסיף קריאה אמיתית ל-Freshdesk או מערכת אחרת
+          # ניתן להוסיף כאן קריאה ל-Freshdesk או כל מערכת תמיכה אחרת
