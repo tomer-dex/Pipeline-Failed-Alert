@@ -22,9 +22,7 @@ jobs:
       - name: 📤 Trigger TerraformPlan-DRIFTChecker.yml
         id: trigger
         run: |
-          echo "📤 Triggering child workflow and saving start time..."
-          start_time=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          echo "start_time=$start_time" >> $GITHUB_ENV
+          echo "start_time=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_ENV
 
           curl -s -X POST \
             -H "Accept: application/vnd.github+json" \
@@ -35,45 +33,53 @@ jobs:
           echo "⏳ Waiting for run to begin..."
           sleep 10
 
-      - name: 🔍 Find latest run
+      - name: 🔍 Find latest workflow run
         id: find-run
         run: |
-          echo "🔍 Looking for workflow run after $start_time..."
           for i in {1..5}; do
             runs=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
               "https://api.github.com/repos/${{ github.repository }}/actions/workflows/TerraformPlan-DRIFTChecker.yml/runs?branch=main")
-            run_id=$(echo "$runs" | jq -r --arg start "$start_time" '.workflow_runs[] | select(.created_at > $start) | .id' | head -n 1)
+
+            run_id=$(echo "$runs" | jq -r --arg start "$start_time" '
+              .workflow_runs[] | select(.created_at > $start) | .id' | head -n 1)
+
             if [ -n "$run_id" ]; then
               echo "run_id=$run_id" >> $GITHUB_OUTPUT
               break
             fi
-            echo "⌛ Not found yet... waiting"
+
+            echo "⌛ Waiting for run to be available..."
             sleep 5
           done
 
           if [ -z "$run_id" ]; then
-            echo "❌ Failed to locate workflow run"
+            echo "❌ Failed to locate a matching run"
             exit 1
           fi
 
-      - name: ⏱ Poll workflow run status
+      - name: ⏱ Poll run status
         id: poll
         run: |
           run_id=${{ steps.find-run.outputs.run_id }}
+
           for i in {1..10}; do
             result=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
               https://api.github.com/repos/${{ github.repository }}/actions/runs/$run_id)
+
             status=$(echo "$result" | jq -r '.status')
             conclusion=$(echo "$result" | jq -r '.conclusion')
+
             echo "Status: $status | Conclusion: $conclusion"
-            if [ "$status" == "completed" ]; then
+
+            if [ "$status" = "completed" ]; then
               echo "conclusion=$conclusion" >> $GITHUB_OUTPUT
               break
             fi
+
             sleep 10
           done
 
-      - name: 📥 Download workflow logs
+      - name: 📥 Download logs
         if: ${{ steps.poll.outputs.conclusion != '' }}
         run: |
           run_id=${{ steps.find-run.outputs.run_id }}
@@ -83,44 +89,44 @@ jobs:
           unzip -o logs.zip -d logs
           find logs
 
-      - name: 🔍 Check for drift in Terraform plan
+      - name: 🔍 Check Terraform plan for drift
         id: diff-check
         run: |
           PLAN_FILE=$(find logs -type f -iname "*Terraform Plan.txt" | head -n 1)
-          echo "Plan file: $PLAN_FILE"
-          
+          echo "Found plan file: $PLAN_FILE"
+
           if [ -z "$PLAN_FILE" ]; then
-            echo "❌ Plan output file not found"
             echo "drift_detected=false" >> $GITHUB_OUTPUT
             exit 0
           fi
-
-          echo "📄 Terraform plan output:"
-          cat "$PLAN_FILE"
 
           if grep -q 'No changes. Infrastructure is up-to-date.' "$PLAN_FILE"; then
             echo "✅ No drift detected"
             echo "drift_detected=false" >> $GITHUB_OUTPUT
           else
-            echo "⚠️ Drift detected!"
+            echo "⚠️ Drift detected"
             echo "drift_detected=true" >> $GITHUB_OUTPUT
+
+            # Save drift output to temp file for proper EOF formatting
             echo "drift_details<<EOF" >> $GITHUB_OUTPUT
             cat "$PLAN_FILE" >> $GITHUB_OUTPUT
             echo "EOF" >> $GITHUB_OUTPUT
           fi
 
-      - name: 📩 Create Freshservice ticket
+      - name: 📩 Open ticket in Freshservice
         if: ${{ steps.diff-check.outputs.drift_detected == 'true' }}
         run: |
-          echo "📨 Creating ticket in Freshservice..."
+          echo "📨 Opening ticket in Freshservice..."
+
           curl -s -X POST "https://directex.freshservice.com/api/v2/tickets" \
             -H "Content-Type: application/json" \
             -H "Authorization: Basic ${{ secrets.FRESHDESK_API_KEY }}" \
             -d "{
-              \"subject\": \"🚨 DRIFT Detected in Terraform\",
-              \"description\": \"The following infrastructure drift was detected:\n\n${{ steps.diff-check.outputs.drift_details }}\",
+              \"subject\": \"🚨 Terraform Drift Detected\",
+              \"description\": \"Detected infrastructure drift during nightly Terraform Plan:\n\n${{ steps.diff-check.outputs.drift_details }}\",
               \"email\": \"tomer@direct-ex.co.il\",
               \"priority\": 1,
               \"status\": 2
             }"
-          echo "🎫 Ticket sent."
+
+          echo "🎫 Ticket opened successfully"
