@@ -57,7 +57,28 @@ jobs:
             fi
             sleep 10
           done
+          
+      - name: Get failure reason
+        if: ${{ steps.poll.outputs.conclusion != 'success' }}
+        run: |
+          run_id=${{ steps.find.outputs.run_id }}
+          echo "🔍 מחפש סיבת כישלון ל-run ID: $run_id"
 
+          jobs_url="https://api.github.com/repos/${{ github.repository }}/actions/runs/$run_id/jobs"
+          response=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "$jobs_url")
+
+          echo "📦 Full jobs response:"
+          echo "$response" | jq .
+
+          failure_step=$(echo "$response" | jq -r '.jobs[].steps[] | select(.conclusion=="failure") | .name' | head -n 1)
+          failure_message=$(echo "$response" | jq -r '.jobs[].steps[] | select(.conclusion=="failure") | .number' | head -n 1)
+
+          if [ -z "$failure_step" ]; then
+            echo "⚠️ לא נמצאה סיבה ברורה לכישלון"
+          else
+            echo "❌ ה-Workflow נכשל בשלב: $failure_step (step #$failure_message)"
+          fi
+          
       - name: Report failure if needed
         if: ${{ steps.poll.outputs.conclusion != 'success' }}
         run: |
