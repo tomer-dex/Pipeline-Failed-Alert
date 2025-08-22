@@ -90,6 +90,7 @@ jobs:
       - name: 🔍 Check Terraform plan for drift
         id: diff-check
         run: |
+          mkdir -p logs
           PLAN_FILE=$(find logs -type f -iname "*plan*.txt" | head -n 1)
           echo "Found plan file: $PLAN_FILE"
 
@@ -108,7 +109,6 @@ jobs:
           else
             echo "⚠️ Drift detected"
             echo "drift_detected=true" >> $GITHUB_OUTPUT
-            echo "📄 Saving drift output..."
             cat "$PLAN_FILE" > drift_details.txt
           fi
         shell: bash
@@ -118,14 +118,14 @@ jobs:
         run: |
           echo "📨 Opening ticket in Freshservice..."
 
-          # הפוך את הפלט ל-JSON string עם escape תקני
+          TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M UTC")
           DRIFT_BODY=$(cat drift_details.txt | jq -Rs .)
 
           curl -s -X POST "https://directex.freshservice.com/api/v2/tickets" \
             -H "Content-Type: application/json" \
             -H "Authorization: Basic ${{ secrets.FRESHDESK_API_KEY }}" \
             -d "{
-              \"subject\": \"🚨 Terraform Drift Detected\",
+              \"subject\": \"🚨 Terraform Drift Detected [$TIMESTAMP]\",
               \"description\": $DRIFT_BODY,
               \"email\": \"tomer@direct-ex.co.il\",
               \"priority\": 1,
