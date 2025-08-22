@@ -1,8 +1,6 @@
 name: Master Terraform Monitor
 
 on:
-  schedule:
-    - cron: '0 5 * * *'  # כל יום ב־05:00 UTC
   workflow_dispatch:
 
 permissions:
