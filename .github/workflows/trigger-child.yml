@@ -119,7 +119,7 @@ jobs:
           echo "📨 Opening ticket in Freshservice..."
       
           echo "📄 Reading and formatting plan file..."
-          DRIFT_BODY=$(sed 's/"/\\"/g' drift_details.txt | sed ':a;N;$!ba;s/\n/\\n/g')
+          DRIFT_BODY=$(awk '/Terraform will perform the following actions:/, /Plan:.*to add/' drift_details.txt | jq -Rs .)
       
           echo "📄 Formatted drift body:"
           echo "$DRIFT_BODY"
@@ -127,7 +127,7 @@ jobs:
           cat <<EOF > payload.json
           {
             "subject": "🚨 Terraform Drift Detected",
-            "description": "$DRIFT_BODY",
+            "description": $DRIFT_BODY,
             "email": "tomer@direct-ex.co.il",
             "priority": 1,
             "status": 2
@@ -141,6 +141,9 @@ jobs:
             -d @payload.json)
       
           echo "$RESPONSE"
+          echo "📄 API Response:"
+          cat response.json
+
           echo "📄 API Response:"
           cat response.json
 
