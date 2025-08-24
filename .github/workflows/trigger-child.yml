@@ -149,8 +149,16 @@ jobs:
           RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -o response.json -X POST "https://directex.freshservice.com/api/v2/tickets" \
           -H "Content-Type: application/json" \
           -H "Authorization: Basic ${{ secrets.FRESHDESK_API_KEY }}" \
-          -d "{\"subject\": \"🚨 Terraform Drift Detected\", \"description\": \"$DRIFT_BODY\", \"email\": \"tomer@direct-ex.co.il\", \"priority\": 1, \"status\": 2}"
-          ) 
+          -d @- <<EOF
+          {
+            "subject": "🚨 Terraform Drift Detected",
+            "description": $DRIFT_BODY,
+            "email": "tomer@direct-ex.co.il",
+            "priority": 1,
+            "status": 2
+          }
+          EOF 
+            )
           echo "$RESPONSE"
           echo "📄 API Response:"
           cat response.json
