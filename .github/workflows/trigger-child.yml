@@ -108,60 +108,45 @@ jobs:
           else
             echo "⚠️ Drift detected"
             echo "drift_detected=true" >> $GITHUB_OUTPUT
-            cat "$PLAN_FILE" > drift_details.txt
+            awk '/Terraform will perform the following actions:/,0' "$PLAN_FILE" > drift_details.txt
           fi
         shell: bash
+        
+      - name: 🐛 Debug drift file
+        run: |
+          echo "------- drift_details.txt --------"
+          cat drift_details.txt
+          echo "----------------------------------"
 
       # - name: 📩 Open ticket in Freshservice
       #   if: ${{ steps.diff-check.outputs.drift_detected == 'true' }}
+      #   shell: bash
       #   run: |
       #     echo "📨 Opening ticket in Freshservice..."
 
       #     echo "📄 Reading plan file..."
-      #     DRIFT_BODY=$(cat drift_details.txt | jq -Rs .)
-
-      #     curl -s -X POST "https://directex.freshservice.com/api/v2/tickets" \
-      #       -H "Content-Type: application/json" \
-      #       -H "Authorization: Basic ${{ secrets.FRESHDESK_API_KEY }}" \
-      #       -d "{
-      #         \"subject\": \"🚨 Terraform Drift Detected\",
-      #         \"description\": $DRIFT_BODY,
-      #         \"email\": \"tomer@direct-ex.co.il\",
-      #         \"priority\": 1,
-      #         \"status\": 2
-      #       }"
-
-      #     echo "🎫 Ticket opened successfully"
-
-      - name: 📩 Open ticket in Freshservice
-        if: ${{ steps.diff-check.outputs.drift_detected == 'true' }}
-        shell: bash
-        run: |
-          echo "📨 Opening ticket in Freshservice..."
-
-          echo "📄 Reading plan file..."
-          DRIFT_BODY=$(jq -Rs . < drift_details.txt)
+      #     DRIFT_BODY=$(jq -Rs . < drift_details.txt)
          
-          echo "📄 Formatted drift body:"
-          echo "$DRIFT_BODY"
+      #     echo "📄 Formatted drift body:"
+      #     echo "$DRIFT_BODY"
 
           
-          cat <<EOF > payload.json
-          {
-            "subject": "🚨 Terraform Drift Detected",
-            "description": $DRIFT_BODY,
-            "email": "tomer@direct-ex.co.il",
-            "priority": 1,
-            "status": 2
-          }
-          EOF
+      #     cat <<EOF > payload.json
+      #     {
+      #       "subject": "🚨 Terraform Drift Detected",
+      #       "description": $DRIFT_BODY,
+      #       "email": "tomer@direct-ex.co.il",
+      #       "priority": 1,
+      #       "status": 2
+      #     }
+      #     EOF
 
-          RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -o response.json \
-          -X POST "https://directex.freshservice.com/api/v2/tickets" \
-          -H "Content-Type: application/json" \
-          -H "Authorization: Basic ${{ secrets.FRESHDESK_API_KEY }}" \
-          -d @payload.json)
+      #     RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -o response.json \
+      #     -X POST "https://directex.freshservice.com/api/v2/tickets" \
+      #     -H "Content-Type: application/json" \
+      #     -H "Authorization: Basic ${{ secrets.FRESHDESK_API_KEY }}" \
+      #     -d @payload.json)
 
-          echo "$RESPONSE"
-          echo "📄 API Response:"
-          cat response.json
+      #     echo "$RESPONSE"
+      #     echo "📄 API Response:"
+      #     cat response.json
