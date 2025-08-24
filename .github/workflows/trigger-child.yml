@@ -118,18 +118,20 @@ jobs:
         run: |
           echo "📨 Opening ticket in Freshservice..."
 
-          TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M UTC")
-          DRIFT_BODY=$(cat drift_details.txt | jq -Rs .)
+          echo "📄 Reading plan file..."
+          DRIFT_BODY=$(cat drift_details.txt)
 
           curl -s -X POST "https://directex.freshservice.com/api/v2/tickets" \
             -H "Content-Type: application/json" \
             -H "Authorization: Basic ${{ secrets.FRESHDESK_API_KEY }}" \
-            -d "{
-              \"subject\": \"🚨 Terraform Drift Detected [$TIMESTAMP]\",
-              \"description\": $DRIFT_BODY,
-              \"email\": \"tomer@direct-ex.co.il\",
-              \"priority\": 1,
-              \"status\": 2
-            }"
+            -d @- <<EOF
+            {
+            "subject": "🚨 Terraform Drift Detected",
+            "description": "$(echo "$DRIFT_BODY" | sed 's/"/\\"/g')",
+            "email": "tomer@direct-ex.co.il",
+            "priority": 1,
+            "status": 2
+            }
+            EOF
 
           echo "🎫 Ticket opened successfully"
