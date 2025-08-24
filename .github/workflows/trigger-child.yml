@@ -125,13 +125,13 @@ jobs:
             -H "Content-Type: application/json" \
             -H "Authorization: Basic ${{ secrets.FRESHDESK_API_KEY }}" \
             -d @- <<EOF
-            {
-            "subject": "🚨 Terraform Drift Detected",
-            "description": "$(echo "$DRIFT_BODY" | sed 's/"/\\"/g')",
-            "email": "tomer@direct-ex.co.il",
-            "priority": 1,
-            "status": 2
-            }
-            EOF
+{
+  "subject": "🚨 Terraform Drift Detected",
+  "description": "$(echo "$DRIFT_BODY" | sed 's/"/\\"/g')",
+  "email": "tomer@direct-ex.co.il",
+  "priority": 1,
+  "status": 2
+}
+EOF
 
           echo "🎫 Ticket opened successfully"
