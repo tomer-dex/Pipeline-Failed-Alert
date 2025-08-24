@@ -119,12 +119,15 @@ jobs:
           echo "📨 Opening ticket in Freshservice..."
       
           echo "📄 Reading and formatting plan file..."
-          DRIFT_BODY=$(jq -Rs . < drift_details.txt)
+          DRIFT_BODY=$(sed 's/"/\\"/g' drift_details.txt | sed ':a;N;$!ba;s/\n/\\n/g')
+      
+          echo "📄 Formatted drift body:"
+          echo "$DRIFT_BODY"
       
           cat <<EOF > payload.json
           {
             "subject": "🚨 Terraform Drift Detected",
-            "description": "<pre>${DRIFT_BODY:1:${#DRIFT_BODY}-2}</pre>",
+            "description": "$DRIFT_BODY",
             "email": "tomer@direct-ex.co.il",
             "priority": 1,
             "status": 2
@@ -140,8 +143,4 @@ jobs:
           echo "$RESPONSE"
           echo "📄 API Response:"
           cat response.json
-      
-            
-                      echo "$RESPONSE"
-                      echo "📄 API Response:"
-                      cat response.json
+
