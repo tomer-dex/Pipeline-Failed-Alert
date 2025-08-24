@@ -112,23 +112,45 @@ jobs:
           fi
         shell: bash
 
+      # - name: 📩 Open ticket in Freshservice
+      #   if: ${{ steps.diff-check.outputs.drift_detected == 'true' }}
+      #   run: |
+      #     echo "📨 Opening ticket in Freshservice..."
+
+      #     echo "📄 Reading plan file..."
+      #     DRIFT_BODY=$(cat drift_details.txt | jq -Rs .)
+
+      #     curl -s -X POST "https://directex.freshservice.com/api/v2/tickets" \
+      #       -H "Content-Type: application/json" \
+      #       -H "Authorization: Basic ${{ secrets.FRESHDESK_API_KEY }}" \
+      #       -d "{
+      #         \"subject\": \"🚨 Terraform Drift Detected\",
+      #         \"description\": $DRIFT_BODY,
+      #         \"email\": \"tomer@direct-ex.co.il\",
+      #         \"priority\": 1,
+      #         \"status\": 2
+      #       }"
+
+      #     echo "🎫 Ticket opened successfully"
+
       - name: 📩 Open ticket in Freshservice
         if: ${{ steps.diff-check.outputs.drift_detected == 'true' }}
+        shell: bash
         run: |
           echo "📨 Opening ticket in Freshservice..."
 
           echo "📄 Reading plan file..."
-          DRIFT_BODY=$(cat drift_details.txt | jq -Rs .)
+          DRIFT_BODY=$(cat drift_details.txt | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
 
-          curl -s -X POST "https://directex.freshservice.com/api/v2/tickets" \
+          run: |
+            echo "📄 Formatted drift body:"
+            echo "$DRIFT_BODY"
+
+          run: |
+            curl -s -w "\nHTTP %{http_code}" -o response.json -X POST "https://directex.freshservice.com/api/v2/tickets" \
             -H "Content-Type: application/json" \
             -H "Authorization: Basic ${{ secrets.FRESHDESK_API_KEY }}" \
-            -d "{
-              \"subject\": \"🚨 Terraform Drift Detected\",
-              \"description\": $DRIFT_BODY,
-              \"email\": \"tomer@direct-ex.co.il\",
-              \"priority\": 1,
-              \"status\": 2
-            }"
+            -d "{\"subject\": \"🚨 Terraform Drift Detected\", \"description\": \"$DRIFT_BODY\", \"email\": \"tomer@direct-ex.co.il\", \"priority\": 1, \"status\": 2}"
 
-          echo "🎫 Ticket opened successfully"
+            echo "📄 API Response:"
+            cat response.json
