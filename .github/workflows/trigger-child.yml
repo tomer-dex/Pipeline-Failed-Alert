@@ -146,10 +146,7 @@ jobs:
           echo "$DRIFT_BODY"
 
           
-          RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -o response.json -X POST "https://directex.freshservice.com/api/v2/tickets" \
-          -H "Content-Type: application/json" \
-          -H "Authorization: Basic ${{ secrets.FRESHDESK_API_KEY }}" \
-          -d @- <<EOF
+          cat <<EOF > payload.json
           {
             "subject": "🚨 Terraform Drift Detected",
             "description": $DRIFT_BODY,
@@ -157,8 +154,14 @@ jobs:
             "priority": 1,
             "status": 2
           }
-          EOF 
-            )
+          EOF
+
+          RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -o response.json \
+          -X POST "https://directex.freshservice.com/api/v2/tickets" \
+          -H "Content-Type: application/json" \
+          -H "Authorization: Basic ${{ secrets.FRESHDESK_API_KEY }}" \
+          -d @payload.json)
+
           echo "$RESPONSE"
           echo "📄 API Response:"
           cat response.json
