@@ -112,12 +112,6 @@ jobs:
           fi
         shell: bash
         
-      - name: 🐛 Debug drift file
-        run: |
-          echo "------- drift_details.txt --------"
-          cat drift_details.txt
-          echo "----------------------------------"
-
       - name: 📩 Open ticket in Freshservice
         if: ${{ steps.diff-check.outputs.drift_detected == 'true' }}
         shell: bash
@@ -125,12 +119,12 @@ jobs:
           echo "📨 Opening ticket in Freshservice..."
       
           echo "📄 Reading and formatting plan file..."
-          DRIFT_BODY=$(cat drift_details.txt | sed 's/"/\\"/g')
+          DRIFT_BODY=$(jq -Rs . < drift_details.txt)
       
           cat <<EOF > payload.json
           {
             "subject": "🚨 Terraform Drift Detected",
-            "description": "<pre>$DRIFT_BODY</pre>",
+            "description": "<pre>${DRIFT_BODY:1:${#DRIFT_BODY}-2}</pre>",
             "email": "tomer@direct-ex.co.il",
             "priority": 1,
             "status": 2
@@ -138,15 +132,16 @@ jobs:
           EOF
       
           RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -o response.json \
-          -X POST "https://directex.freshservice.com/api/v2/tickets" \
-          -H "Content-Type: application/json" \
-          -H "Authorization: Basic ${{ secrets.FRESHDESK_API_KEY }}" \
-          -d @payload.json)
+            -X POST "https://directex.freshservice.com/api/v2/tickets" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Basic ${{ secrets.FRESHDESK_API_KEY }}" \
+            -d @payload.json)
       
           echo "$RESPONSE"
           echo "📄 API Response:"
           cat response.json
       
-                echo "$RESPONSE"
-                echo "📄 API Response:"
-                cat response.json
+            
+                      echo "$RESPONSE"
+                      echo "📄 API Response:"
+                      cat response.json
