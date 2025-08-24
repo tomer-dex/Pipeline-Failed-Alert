@@ -87,40 +87,48 @@ jobs:
           unzip -o logs.zip -d logs
           find logs
 
+      - name: 🔍 Check Terraform plan for drift
+        id: diff-check
+        run: |
+          PLAN_FILE=$(find logs -type f -iname "*plan*.txt" | head -n 1)
+          echo "Found plan file: $PLAN_FILE"
+
+          if [ -z "$PLAN_FILE" ]; then
+            echo "✅ No plan file found – assuming no drift"
+            echo "drift_detected=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "📄 Plan output:"
+          cat "$PLAN_FILE"
+
+          if grep -q 'No changes. Infrastructure is up-to-date.' "$PLAN_FILE"; then
+            echo "✅ No drift detected"
+            echo "drift_detected=false" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️ Drift detected"
+            echo "drift_detected=true" >> $GITHUB_OUTPUT
+            cat "$PLAN_FILE" > drift_details.txt
+          fi
+        shell: bash
+
       - name: 📩 Open ticket in Freshservice
-  if: ${{ steps.diff-check.outputs.drift_detected == 'true' }}
-  shell: bash
-  run: |
-    echo "📨 Opening ticket in Freshservice..."
+        if: ${{ steps.diff-check.outputs.drift_detected == 'true' }}
+        run: |
+          echo "📨 Opening ticket in Freshservice..."
 
-    # קריאה מהקובץ, המרת גרשיים וירידות שורה
-    DRIFT_BODY=$(cat drift_details.txt | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
+          echo "📄 Reading plan file..."
+          DRIFT_BODY=$(cat drift_details.txt | jq -Rs .)
 
-    echo "📄 Formatted drift body:"
-    echo "$DRIFT_BODY"
+          curl -s -X POST "https://directex.freshservice.com/api/v2/tickets" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Basic ${{ secrets.FRESHDESK_API_KEY }}" \
+            -d "{
+              \"subject\": \"🚨 Terraform Drift Detected\",
+              \"description\": $DRIFT_BODY,
+              \"email\": \"tomer@direct-ex.co.il\",
+              \"priority\": 1,
+              \"status\": 2
+            }"
 
-    # בניית JSON תקני
-    JSON_PAYLOAD=$(cat <<EOF
-{
-  "subject": "🚨 Terraform Drift Detected",
-  "description": "$DRIFT_BODY",
-  "email": "tomer@direct-ex.co.il",
-  "priority": 1,
-  "status": 2
-}
-EOF
-)
-
-    echo "📦 Payload to send:"
-    echo "$JSON_PAYLOAD"
-
-    # שליחה בפועל + דיבוג תשובה
-    RESPONSE=$(curl -s -w "\n🔢 HTTP status: %{http_code}\n" -o response.json -X POST "https://directex.freshservice.com/api/v2/tickets" \
-      -H "Content-Type: application/json" \
-      -H "Authorization: Basic ${{ secrets.FRESHDESK_API_KEY }}" \
-      -d "$JSON_PAYLOAD")
-
-    echo "$RESPONSE"
-    echo "📄 API response body:"
-    cat response.json
-
+          echo "🎫 Ticket opened successfully"
