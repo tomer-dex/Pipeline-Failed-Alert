@@ -124,13 +124,12 @@ jobs:
         run: |
           echo "📨 Opening ticket in Freshservice..."
 
-          echo "📄 Reading plan file..."
-          DRIFT_BODY=$(jq -Rs . < drift_details.txt)
-         
+          echo "📄 Reading and formatting plan file..."
+          DRIFT_BODY=$(jq -Rs . < drift_details.txt)  # הופך את כל הקובץ ל-string JSON חוקי
+
           echo "📄 Formatted drift body:"
           echo "$DRIFT_BODY"
 
-          
           cat <<EOF > payload.json
           {
             "subject": "🚨 Terraform Drift Detected",
