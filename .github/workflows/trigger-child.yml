@@ -20,6 +20,7 @@ jobs:
       - name: 📤 Trigger deploy.yml
         id: trigger
         run: |
+          gh workflow run deploy.yml --ref main
           echo "start_time=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_ENV #create start time var to know what is the specific time that the deploy.yml is ran
 
           # curl -s -X POST \
@@ -27,8 +28,7 @@ jobs:
           #   -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
           #   https://api.github.com/repos/${{ github.repository }}/actions/workflows/deploy.yml/dispatches \
           #   -d '{"ref":"main"}'
-          run: gh workflow run deploy.yml --ref main
-
+          
           echo "⏳ Waiting for run to begin..."
           sleep 10
 
