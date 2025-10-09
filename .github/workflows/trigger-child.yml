@@ -15,18 +15,19 @@ jobs:
       - name: Install tools
         run: |
           sudo apt-get update
-          sudo apt-get install curl jq unzip -y
+          sudo apt-get install curl jq gh unzip -y
 
       - name: 📤 Trigger deploy.yml
         id: trigger
         run: |
           echo "start_time=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_ENV #create start time var to know what is the specific time that the deploy.yml is ran
 
-          curl -s -X POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            https://api.github.com/repos/${{ github.repository }}/actions/workflows/deploy.yml/dispatches \
-            -d '{"ref":"main"}'
+          # curl -s -X POST \
+          #   -H "Accept: application/vnd.github+json" \
+          #   -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+          #   https://api.github.com/repos/${{ github.repository }}/actions/workflows/deploy.yml/dispatches \
+          #   -d '{"ref":"main"}'
+          run: gh workflow run deploy.yml --ref main
 
           echo "⏳ Waiting for run to begin..."
           sleep 10
