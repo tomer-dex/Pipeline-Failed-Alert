@@ -29,34 +29,26 @@ jobs:
         id: trigger
         run: |
           gh workflow run deploy.yml --ref main
-          echo "start_time=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_ENV #create start time var to know what is the specific time that the deploy.yml is run
-          
-          echo "⏳ Waiting for run to begin..."
+          echo "start_time=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_ENV #create start time var to know what is the specific time that the deploy.yml is ru
           sleep 10
 
       - name: 🔍 Find latest workflow run
         id: find-run
         run: |
-          for i in {1..5}; do
-            runs=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/deploy.yml/runs?branch=main")
-
-            run_id=$(echo "$runs" | jq -r --arg start "$start_time" '
-              .workflow_runs[] | select(.created_at > $start) | .id' | head -n 1)
-
-            if [ -n "$run_id" ]; then
-              echo "run_id=$run_id" >> $GITHUB_OUTPUT
-              break
-            fi
-
-            echo "⌛ Waiting for run to be available..."
-            sleep 5
-          done
+          echo "🔎 Searching for latest deploy.yml run..."
+          run_id=$(gh run list \
+            --workflow deploy.yml \
+            --branch main \
+            --json databaseId,createdAt \
+            --jq ".[] | select(.createdAt > \"${start_time}\") | .databaseId" | head -n 1)
 
           if [ -z "$run_id" ]; then
-            echo "❌ Failed to locate a matching run"
+            echo "❌ No matching run found"
             exit 1
           fi
+
+          echo "✅ Found run ID: $run_id"
+          echo "run_id=$run_id" >> $GITHUB_OUTPUT
 
       - name: ⏱ Poll run status
         id: poll
