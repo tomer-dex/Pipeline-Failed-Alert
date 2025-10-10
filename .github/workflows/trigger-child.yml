@@ -94,11 +94,13 @@ jobs:
         run: |
           echo "📨 Opening ticket in Freshservice..."
       
-          # ניקוי קודי צבעים ויצירת טקסט קריא עם בלוק קוד פשוט
+          # ניקוי קודי צבעים
           CLEAN_BODY=$(sed -r "s/\x1B\[[0-9;]*[A-Za-z]//g" drift_details.txt)
-          DRIFT_BODY=$(echo -e "### Terraform Drift Detected\n\n\`\`\`\n$CLEAN_BODY\n\`\`\`")
       
-          # שליחת קריאה ל-Freshservice
+          # עטיפה ב-HTML שמציג שורות כמות שהן
+          DRIFT_BODY="<h3>Terraform Drift Detected</h3><pre><code>${CLEAN_BODY}</code></pre>"
+      
+          # יצירת JSON ושליחה ל-Freshservice
           curl -s -X POST "https://directex.freshservice.com/api/v2/tickets" \
             -H "Content-Type: application/json" \
             -H "Authorization: Basic ${{ secrets.FRESHDESK_API_KEY }}" \
@@ -106,4 +108,3 @@ jobs:
                         --arg desc "$DRIFT_BODY" \
                         --arg email 'tomer@direct-ex.co.il' \
                         '{subject:$sub, description:$desc, email:$email, priority:1, status:2}')"
-
