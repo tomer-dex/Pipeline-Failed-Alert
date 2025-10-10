@@ -62,37 +62,31 @@ jobs:
           # אם הגענו לפה, זה אומר שהריצה הסתיימה בהצלחה
           echo "✅ Deploy workflow completed successfully!"
 
-      - name: 📥 Download logs
+      - name: 🔍 Extract Terraform plan from deploy.yml logs
+        id: extract-plan
         run: |
           run_id=${{ steps.find-run.outputs.run_id }}
-          echo "📦 Downloading logs for run $run_id..."
-          gh run download $run_id --dir logs || echo "⚠️ No logs found"
-          find logs || echo "No log files found"
+          echo "📖 Fetching logs for run ID: $run_id..."
 
-      - name: 🔍 Check Terraform plan for drift
-        id: diff-check
-        run: |
-          PLAN_FILE=$(find logs -type f -iname "*plan*.txt" | head -n 1)
-          echo "Found plan file: $PLAN_FILE"
+          # שליפת כל הלוגים בפורמט טקסט
+          LOG_CONTENT=$(gh run view $run_id --log)
 
-          if [ -z "$PLAN_FILE" ]; then
-            echo "✅ No plan file found – assuming no drift"
-            echo "drift_detected=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
+          # שמירת הלוג המלא כ-reference
+          echo "$LOG_CONTENT" > full_log.txt
 
-          echo "📄 Plan output:"
-          cat "$PLAN_FILE"
+          echo "🔍 Searching for Terraform plan output..."
+          PLAN_OUTPUT=$(echo "$LOG_CONTENT" | awk '/Terraform will perform the following actions:/,/Plan: [0-9]+ to add/')
 
-          if grep -q 'No changes. Infrastructure is up-to-date.' "$PLAN_FILE"; then
-            echo "✅ No drift detected"
+          if [ -z "$PLAN_OUTPUT" ]; then
+            echo "✅ No Terraform drift detected"
             echo "drift_detected=false" >> $GITHUB_OUTPUT
           else
             echo "⚠️ Drift detected"
+            echo "$PLAN_OUTPUT" > drift_details.txt
             echo "drift_detected=true" >> $GITHUB_OUTPUT
-            awk '/Terraform will perform the following actions:/,0' "$PLAN_FILE" > drift_details.txt
           fi
         shell: bash
+
         
       - name: 📩 Open ticket in Freshservice
         if: ${{ steps.diff-check.outputs.drift_detected == 'true' }}
