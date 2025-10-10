@@ -94,20 +94,25 @@ jobs:
         run: |
           echo "📨 Opening ticket in Freshservice..."
       
-          # שלב 1: חילוץ רק את גוף ה-terraform plan מתוך הלוג
+          # חילוץ רק את הקטע של ה-Plan
           awk '/Terraform will perform the following actions:/,/Note: You/' drift_details.txt > raw_plan.txt
       
-          # שלב 2: ניקוי prefixים של GitHub Actions
-          sed -i 's/terraform-plan[[:space:]]*Terraform apply[[:space:]]*[0-9TZ\.\-]*Z[[:space:]]*//g' raw_plan.txt
+          # הסרת prefixים של GitHub Actions
+          # מוחק את 3 המילים הראשונות בכל שורה אם היא מתחילה ב-"terraform-plan"
+          awk '{ if ($1 == "terraform-plan") {$1=$2=$3=""; sub(/^   */, ""); print} else {print} }' raw_plan.txt > clean_plan.txt
       
-          # שלב 3: ניקוי קודי צבע ANSI
-          sed -i -r "s/\x1B\[[0-9;]*[A-Za-z]//g" raw_plan.txt
+          # ניקוי קודי צבעים (ANSI)
+          sed -i -r "s/\x1B\[[0-9;]*[A-Za-z]//g" clean_plan.txt
       
-          # שלב 4: יצירת גוף HTML יפה ונקי
-          CLEAN_BODY=$(cat raw_plan.txt)
+          # שמירת הפלט הנקי
+          echo "✅ Cleaned plan output:"
+          cat clean_plan.txt
+      
+          # יצירת גוף HTML ברור לקריאה
+          CLEAN_BODY=$(cat clean_plan.txt)
           DRIFT_BODY="<h3>Terraform Drift Detected</h3><pre><code>${CLEAN_BODY}</code></pre>"
       
-          # שלב 5: יצירת JSON ושליחה ל-Freshservice
+          # שליחה ל-Freshservice
           curl -s -X POST "https://directex.freshservice.com/api/v2/tickets" \
             -H "Content-Type: application/json" \
             -H "Authorization: Basic ${{ secrets.FRESHDESK_API_KEY }}" \
