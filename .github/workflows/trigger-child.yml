@@ -94,13 +94,20 @@ jobs:
         run: |
           echo "📨 Opening ticket in Freshservice..."
       
-          # ניקוי קודי צבעים
-          CLEAN_BODY=$(sed -r "s/\x1B\[[0-9;]*[A-Za-z]//g" drift_details.txt)
+          # שלב 1: חילוץ רק את גוף ה-terraform plan מתוך הלוג
+          awk '/Terraform will perform the following actions:/,/Note: You/' drift_details.txt > raw_plan.txt
       
-          # עטיפה ב-HTML שמציג שורות כמות שהן
+          # שלב 2: ניקוי prefixים של GitHub Actions
+          sed -i 's/terraform-plan[[:space:]]*Terraform apply[[:space:]]*[0-9TZ\.\-]*Z[[:space:]]*//g' raw_plan.txt
+      
+          # שלב 3: ניקוי קודי צבע ANSI
+          sed -i -r "s/\x1B\[[0-9;]*[A-Za-z]//g" raw_plan.txt
+      
+          # שלב 4: יצירת גוף HTML יפה ונקי
+          CLEAN_BODY=$(cat raw_plan.txt)
           DRIFT_BODY="<h3>Terraform Drift Detected</h3><pre><code>${CLEAN_BODY}</code></pre>"
       
-          # יצירת JSON ושליחה ל-Freshservice
+          # שלב 5: יצירת JSON ושליחה ל-Freshservice
           curl -s -X POST "https://directex.freshservice.com/api/v2/tickets" \
             -H "Content-Type: application/json" \
             -H "Authorization: Basic ${{ secrets.FRESHDESK_API_KEY }}" \
