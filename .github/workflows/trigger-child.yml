@@ -98,17 +98,19 @@ jobs:
           awk '/Terraform will perform the following actions:/,/Note: You/' drift_details.txt > raw_plan.txt
       
           # הסרת prefixים של GitHub Actions
-          # מוחק את 3 המילים הראשונות בכל שורה אם היא מתחילה ב-"terraform-plan"
           awk '{ if ($1 == "terraform-plan") {$1=$2=$3=""; sub(/^   */, ""); print} else {print} }' raw_plan.txt > clean_plan.txt
       
-          # ניקוי קודי צבעים (ANSI)
+          # הסרת timestamps
+          sed -i -E 's/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+Z[[:space:]]*//g' clean_plan.txt
+      
+          # ניקוי קודי צבעים
           sed -i -r "s/\x1B\[[0-9;]*[A-Za-z]//g" clean_plan.txt
       
-          # שמירת הפלט הנקי
-          echo "✅ Cleaned plan output:"
+          # הצגה לבדיקה
+          echo "✅ Cleaned Terraform plan:"
           cat clean_plan.txt
       
-          # יצירת גוף HTML ברור לקריאה
+          # עיצוב HTML יפה לקריאה ב-Freshservice
           CLEAN_BODY=$(cat clean_plan.txt)
           DRIFT_BODY="<h3>Terraform Drift Detected</h3><pre><code>${CLEAN_BODY}</code></pre>"
       
