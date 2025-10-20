@@ -94,32 +94,31 @@ jobs:
         run: |
           echo "📨 Opening ticket in Freshservice..."
       
-          # חילוץ וניקוי של תוכן ה-terraform plan
+          # חילוץ רק את הקטע של ה-Plan
           awk '/Terraform will perform the following actions:/,/Note: You/' drift_details.txt > raw_plan.txt
+      
+          # הסרת prefixים של GitHub Actions
           awk '{ if ($1 == "terraform-plan") {$1=$2=$3=""; sub(/^   */, ""); print} else {print} }' raw_plan.txt > clean_plan.txt
+      
+          # הסרת timestamps
           sed -i -E 's/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+Z[[:space:]]*//g' clean_plan.txt
+      
+          # ניקוי קודי צבעים
           sed -i -r "s/\x1B\[[0-9;]*[A-Za-z]//g" clean_plan.txt
       
-          # הפיכת הפלט למחרוזת JSON חוקית
-          ESCAPED_BODY=$(jq -Rs . < clean_plan.txt)
+          # הצגה לבדיקה
+          echo "✅ Cleaned Terraform plan:"
+          cat clean_plan.txt
       
-          # בניית גוף הבקשה בדיוק כמו ב-Elastic
-          cat <<EOF > payload.json
-          {
-            "short_description": "🚨 Terraform Drift Detected",
-            "description": $ESCAPED_BODY,
-            "severity": "warning",
-            "Metric_Name": "Terraform Drift",
-            "Metric_Value": "Detected Changes",
-            "Resource": "Infrastructure - Terraform"
-          }
-          EOF
+          # עיצוב HTML יפה לקריאה ב-Freshservice
+          CLEAN_BODY=$(cat clean_plan.txt)
+          DRIFT_BODY="<h3>Terraform Drift Detected</h3><pre><code>${CLEAN_BODY}</code></pre>"
       
-          echo "📄 Payload:"
-          cat payload.json
-      
-          # שליחה ל-Freshservice API
+          # שליחה ל-Freshservice
           curl -s -X POST "https://directex.freshservice.com/api/v2/tickets" \
             -H "Content-Type: application/json" \
             -H "Authorization: Basic ${{ secrets.FRESHDESK_API_KEY }}" \
-            -d @payload.json
+            -d "$(jq -n --arg sub '🚨 Terraform Drift Detected' \
+                        --arg desc "$DRIFT_BODY" \
+                        --arg email 'tomer@direct-ex.co.il' \
+                        '{subject:$sub, description:$desc, email:$email, priority:1, status:2}')"
