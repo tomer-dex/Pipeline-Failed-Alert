@@ -26,5 +26,8 @@ jobs:
       - name: Terraform Init
         run: terraform -chdir=$TF_DIR init
 
-      - name: Terraform apply
+      - name: Terraform plan
         run: terraform -chdir=$TF_DIR plan
+
+      - name: Terraform apply
+        run: terraform -chdir=$TF_DIR apply -auto-approve
